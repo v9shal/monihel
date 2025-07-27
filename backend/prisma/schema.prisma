@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- ENUMS: For enforcing specific, allowed values ---
+enum PingStatus {
+  UP
+  DOWN
+  TIMEOUT
+}
+
+enum AlertStatus {
+  TRIGGERED
+  ACKNOWLEDGED // Future use: A user has seen the alert but it's not resolved
+  RESOLVED
+}
+
+enum NotificationType {
+  EMAIL
+  WEBHOOK // For future integration with Slack, etc.
+}
+
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  password  String   @db.VarChar(255) // Hashed password
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  endpoints            Endpoint[]
+  notificationChannels NotificationChannel[]
+  
+  @@index([email])
+}
+
+
+model Endpoint {
+  id               Int      @id @default(autoincrement())
+  name             String   // A user-friendly name, e.g., "Primary API"
+  url              String   @db.VarChar(2048) // A more specific string type for URLs
+  isActive         Boolean  @default(true) // Is monitoring paused or active?
+  checkIntervalSec Int      @default(60)   // How often to ping, in seconds
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Alerting Configuration
+  consecutiveFails        Int     @default(0)    // Current count of consecutive failures
+  alertOnConsecutiveFails Int     @default(3)    // Trigger alert after N failures
+  isMuted                 Boolean @default(false) // Temporarily silence alerts for this endpoint
+
+  // Foreign Key to User
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade) // If user is deleted, their endpoints are too
+
+  // Relations
+  metrics EndpointMetric[]
+  alerts  Alert[]
+
+  // An endpoint must be unique for a given user.
+  @@unique([userId, url])
+  @@index([userId])
+}
+
+
+model EndpointMetric {
+  id             Int        @default(autoincrement())
+  timestamp      DateTime   @db.Timestamptz(3)
+  responseTimeMs Int
+  statusCode     Int
+  status         PingStatus // Using our Enum for data integrity
+
+  // Foreign Key to Endpoint
+  endpointId Int
+  endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  // Composite Primary Key - Required for TimescaleDB
+  @@id([timestamp, endpointId])
+  @@index([timestamp])
+  @@index([endpointId])
+}
+
+
+model Alert {
+  id         Int         @id @default(autoincrement())
+  status     AlertStatus // Using our Enum
+  createdAt  DateTime    @default(now())
+  resolvedAt DateTime?
+  
+  // A short message for the alert, e.g., "Endpoint is down (Status 503)"
+  message    String?
+
+  // Foreign Key to Endpoint
+  endpointId Int
+  endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  
+  @@index([endpointId, status])
+}
+
+
+model NotificationChannel {
+  id        Int              @id @default(autoincrement())
+  type      NotificationType // Using our Enum
+  target    String           // The email address or webhook URL
+  isDefault Boolean          @default(false) // Is this the primary notification channel?
+
+  // Foreign Key to User
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
