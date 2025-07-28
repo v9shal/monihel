@@ -5,9 +5,9 @@ services:
     ports:
      - "5432:5432"
     environment:
-      - POSTGRES_USER=vishal
-      - POSTGRES_PASSWORD=vishal@43
-      - POSTGRES_DB=apimonitor
+      - POSTGRES_USER=
+      - POSTGRES_PASSWORD=
+      - POSTGRES_DB=
     volumes:
       - ./pgdata:/var/lib/postgresql/data
    redis:
