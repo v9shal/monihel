@@ -4,7 +4,8 @@ import { emailService } from '../service/emailService.js';
 
 console.log('starting alert-worker process');
 
-const redisConnection=new Redis('redis://localhost:6379',{
+const redisUrl=process.env.REDIS_URL||'redis://'
+const redisConnection=new Redis(redisUrl,{
     maxRetriesPerRequest:null
 
 
