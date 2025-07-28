@@ -130,13 +130,10 @@ export const publishToUser = (userId: number, eventType: string, payload: any) =
     console.log(`[Redis Publisher] Published '${eventType}' to channel: ${channel}`);
 };
 
-// Health check endpoint
 app.get('/api/health', async (req, res) => {
     try {
-        // Check database connection
         await prisma.$queryRaw`SELECT 1`;
         
-        // Check Redis connection
         const redisStatus = isRedisConnected ? 'connected' : 'disconnected';
         
         const health = {
@@ -201,11 +198,9 @@ app.post('/ping/:id', async (req, res) => {
     }
 });
 
-// Graceful shutdown handling
 process.on('SIGTERM', async () => {
     console.log('[Server] SIGTERM received, shutting down gracefully');
     
-    // Close HTTP server
     http.close(() => {
         console.log('[Server] HTTP server closed');
     });
@@ -214,7 +209,6 @@ process.on('SIGTERM', async () => {
     await prisma.$disconnect();
     console.log('[Server] Database connection closed');
     
-    // Close Redis connections
     subClient.quit();
     redisPublisher.quit();
     console.log('[Server] Redis connections closed');
@@ -225,16 +219,12 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
     console.log('[Server] SIGINT received, shutting down gracefully');
     
-    // Close HTTP server
     http.close(() => {
         console.log('[Server] HTTP server closed');
     });
-    
-    // Close database connection
     await prisma.$disconnect();
     console.log('[Server] Database connection closed');
     
-    // Close Redis connections
     subClient.quit();
     redisPublisher.quit();
     console.log('[Server] Redis connections closed');
@@ -244,15 +234,12 @@ process.on('SIGINT', async () => {
 
 async function initialize() {
     try {
-        // Test database connection
         await prisma.$connect();
         console.log('[Server] Database connected successfully');
         
-        // Recreate active jobs
         await recreateActiveJobs();
         console.log('[Server] Active jobs recreated');
         
-        // Start server
         http.listen(PORT, () => {
             console.log(`[Server] Server is running on http://localhost:${PORT}`);
             console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
