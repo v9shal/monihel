@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
-import { type RootState } from '../../app/store';
+//import { type RootState } from '../../app/store';
 import { type NewEndpointData, fetchEndPointApi, createEndPoint, pauseEndPoint, deleteEndpoint, resumeEndpoint } from '../../api/endpointApi';
 import { type EndpointMetric, type Endpoint } from '../../types';
 
@@ -159,11 +159,12 @@ export const endpointsSlice = createSlice({
   },
 });
 
-export const selectAllEndpoints = (state: RootState) => state.endpoints.items;
-export const selectEndpointsStatus = (state: RootState) => state.endpoints.status;
-export const selectEndpointsError = (state: RootState) => state.endpoints.error;
+export const selectAllEndpoints = (state: { endpoints: EndpointsState }) => state.endpoints.items;
+export const selectEndpointsStatus = (state: { endpoints: EndpointsState }) => state.endpoints.status;
+export const selectEndpointsError = (state: {endpoints:EndpointsState}) => state.endpoints.error;
 
-export const selectEndpointById = (state: RootState, endpointId: number) => 
+
+export const selectEndpointById = (state: {endpoints:EndpointsState}, endpointId: number) => 
   state.endpoints.items.find(endpoint => endpoint.id === endpointId);
 
 export const { endpointsUpdated, endpointUpdated, singleMetricUpdate } = endpointsSlice.actions;

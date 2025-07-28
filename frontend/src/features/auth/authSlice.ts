@@ -1,7 +1,7 @@
 import { createSlice,createAsyncThunk } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { connectSocket, disconnectSocket } from '../../lib/socketService';
-import type { RootState } from "../../app/store";
+//import type { RootState } from "../../app/store";
 import { loginApi ,getProfileApi,registerApi} from '../../api/authApi';
 
  export  interface User{
@@ -128,8 +128,8 @@ export const authSlice=createSlice({
 });
 
 export const {logout} =authSlice.actions;
-export const selectIsAuthenticated = (state: RootState) => state.auth.isAuthenticated;
+export const selectIsAuthenticated = (state: {auth:AuthState}) => state.auth.isAuthenticated;
 
-export const selectUser=(state:RootState)=>state.auth.user;
-export const selectAuthStatus=(state:RootState)=>state.auth.status;
+export const selectUser=(state:{auth:AuthState})=>state.auth.user;
+export const selectAuthStatus=(state:{auth:AuthState})=>state.auth.status;
 export default authSlice.reducer;
