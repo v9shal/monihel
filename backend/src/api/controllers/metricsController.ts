@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import prisma from '../../config/prisma';
-import { getUserEndpoint, parseIntParam } from '../../utils/endpointUtils';
+import prisma from '../../config/prisma.js';
+import { getUserEndpoint, parseIntParam } from '../../utils/endpointUtils.js';
 
 export const getHourlyMetrics = async (req: Request, res: Response) => {
     try {

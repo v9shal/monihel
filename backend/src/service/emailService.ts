@@ -1,30 +1,36 @@
 import nodemailer from 'nodemailer';
-
+import 'dotenv/config'
 class EmailService {
-    private transporter: nodemailer.Transporter | undefined;
+   private transporter: nodemailer.Transporter | undefined;
 
-    async initialize() {
-        const testAccount = await nodemailer.createTestAccount();
+    public initialize() {
+        const host = process.env.EMAIL_HOST;
+        const port = parseInt(process.env.EMAIL_PORT || '587', 10);
+        const user = process.env.EMAIL_USER;
+        const pass = process.env.EMAIL_PASS;
 
-        console.log("--- Ethereal Test Account ---");
-        console.log(`[Email Service] User: ${testAccount.user}`);
-        console.log(`[Email Service] Pass: ${testAccount.pass}`);
-        console.log("-----------------------------");
+        if (!host || !port || !user || !pass) {
+            console.error("[Email Service] Missing required email configuration in .env file (EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS).");
+            return;
+        }
+
+        console.log(`[Email Service] Initializing SMTP transporter for ${host}...`);
 
         this.transporter = nodemailer.createTransport({
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false, 
+            host: host,
+            port: port,
+            secure: port === 465, 
             auth: {
-                user: testAccount.user,
-                pass: testAccount.pass,
+                user: user,
+                pass: pass,
             },
         });
+        console.log("[Email Service] SMTP transporter initialized successfully.");
     }
 
     async sendMail(to: string, subject: string, body: string) {
         if (!this.transporter) {
-            throw new Error('Email service is not initialized. Call initialize() first.');
+            throw new Error('Email transporter is not initialized. Check server configuration and logs.');
         }
 
         const mailOptions = {
@@ -43,13 +49,7 @@ class EmailService {
 
         const info = await this.transporter.sendMail(mailOptions);
 
-        const previewUrl = nodemailer.getTestMessageUrl(info);
-        console.log(`[Email Service] Message sent: ${info.messageId}`);
-        console.log(`[Email Service] Preview URL: ${previewUrl}`);
-
-        if (!previewUrl) {
-            console.warn("[Email Service] Ethereal did not return a preview URL. Check console for credentials.");
-        }
+       
     }
 }
 

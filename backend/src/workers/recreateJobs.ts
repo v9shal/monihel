@@ -1,5 +1,5 @@
-import prisma from "../config/prisma";
-import { pingQueue } from "../config/bullmq";
+import prisma from "../config/prisma.js";
+import { pingQueue } from "../config/bullmq.js";
  export async function recreateActiveJobs() {
     try {
         console.log('[Server] Recreating jobs for active endpoints...');

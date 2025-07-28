@@ -1,10 +1,10 @@
 import {Worker} from 'bullmq'
-import IORedis from 'ioredis';
-import { emailService } from '../service/emailService';
+import {Redis} from 'ioredis';
+import { emailService } from '../service/emailService.js';
 
 console.log('starting alert-worker process');
 
-const redisConnection=new IORedis('redis://localhost:6379',{
+const redisConnection=new Redis('redis://localhost:6379',{
     maxRetriesPerRequest:null
 
 

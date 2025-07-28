@@ -1,9 +1,9 @@
-import React,{useState,type FormEvent} from "react";
+import {useState,type FormEvent} from "react";
 import { useAppDispatch,useAppSelector } from "../app/hooks";
 import { registeruser } from "../features/auth/authSlice";
 import { Link, Navigate } from "react-router-dom";
 import { selectIsAuthenticated,selectAuthStatus } from '../features/auth/authSlice';
-export const RegisterPage = () => { // Components should be PascalCase
+export const RegisterPage = () => { 
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const authStatus = useAppSelector(selectAuthStatus);
@@ -14,8 +14,6 @@ export const RegisterPage = () => { // Components should be PascalCase
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    // --- THE FIX ---
-    // Pass a single object to the thunk, matching its expected payload.
     dispatch(registeruser({ name, email, password }));
   };
 
@@ -23,7 +21,6 @@ export const RegisterPage = () => { // Components should be PascalCase
     return <Navigate to={'/dashboard'} />;
   }
 
-  // --- ADDED THE JSX RETURN STATEMENT ---
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
       <div className="p-8 max-w-md w-full bg-gray-800 rounded-lg shadow-lg">

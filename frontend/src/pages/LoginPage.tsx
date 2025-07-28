@@ -1,6 +1,6 @@
-import React,{useState,type FormEvent} from "react";
+import {useState,type FormEvent} from "react";
 import { useAppDispatch,useAppSelector } from "../app/hooks";
-import { loginUser,selectAuthStatus,selectUser } from "../features/auth/authSlice";
+import { loginUser,selectAuthStatus } from "../features/auth/authSlice";
 import {Navigate } from 'react-router-dom';
 
 import { selectIsAuthenticated } from '../features/auth/authSlice';
@@ -30,8 +30,8 @@ export const LoginPage=()=>{
             <input
               type="email"
               id="email"
-              value={email} // Controlled component: value is tied to state
-              onChange={(e) => setEmail(e.target.value)} // Update state on change
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
               className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:ring-blue-500 focus:border-blue-500"
               required
             />
@@ -41,8 +41,8 @@ export const LoginPage=()=>{
             <input
               type="password"
               id="password"
-              value={password} // Controlled component: value is tied to state
-              onChange={(e) => setPassword(e.target.value)} // Update state on change
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
               className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:ring-blue-500 focus:border-blue-500"
               required
             />
@@ -50,7 +50,7 @@ export const LoginPage=()=>{
           <button
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            disabled={authStatus === 'loading'} // Disable button while logging in
+            disabled={authStatus === 'loading'}
           >
             {authStatus === 'loading' ? 'Logging in...' : 'Login'}
           </button>

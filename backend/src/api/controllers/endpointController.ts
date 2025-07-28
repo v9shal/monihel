@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import prisma from "../../config/prisma";
-import { pingQueue } from "../../config/bullmq";
-import { getUserEndpoint, parseIntParam, isValidUrl } from '../../utils/endpointUtils';
+import prisma from "../../config/prisma.js";
+import { pingQueue } from "../../config/bullmq.js";
+import { getUserEndpoint, parseIntParam, isValidUrl } from '../../utils/endpointUtils.js';
 
 export const createEndPoint = async (req: Request, res: Response) => {
     try {
@@ -302,4 +302,49 @@ export const deleteEndpoint = async (req: Request, res: Response) => {
         console.error('[EndpointController] Delete endpoint error:', error);
         res.status(500).json({ error: 'Failed to delete endpoint' });
     }
+};
+export const getEndpointMetrics = async (req: Request, res: Response) => {
+  try {
+    const endpointId = parseInt(req.params.id);
+    const userId = (req as any).user?.id;
+    
+    // Validate endpoint belongs to user
+    const endpoint = await prisma.endpoint.findFirst({
+      where: { id: endpointId, userId }
+    });
+    
+    if (!endpoint) {
+      return res.status(404).json({ error: 'Endpoint not found' });
+    }
+
+    const { range = '1h', limit = '100' } = req.query;
+    
+    // Calculate time range
+    const now = new Date();
+    const timeRanges = {
+      '1h': new Date(now.getTime() - 60 * 60 * 1000),
+      '6h': new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      '24h': new Date(now.getTime() - 24 * 60 * 60 * 1000),
+    };
+    
+    const startTime = timeRanges[range as keyof typeof timeRanges] || timeRanges['1h'];
+    
+    const metrics = await prisma.endpointMetric.findMany({
+      where: {
+        endpointId,
+        timestamp: {
+          gte: startTime
+        }
+      },
+      orderBy: {
+        timestamp: 'desc'
+      },
+      take: parseInt(limit as string)
+    });
+
+    res.json(metrics);
+  } catch (error) {
+    console.error('Error fetching endpoint metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
 };

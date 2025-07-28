@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { pingQueue, alertQueue } from '../../config/bullmq';
+import { pingQueue, alertQueue } from '../../config/bullmq.js';
 
 export const clearQueue = async (req: Request, res: Response) => {
     try {

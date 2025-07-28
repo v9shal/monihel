@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { clearQueue, testEmail } from '../controllers/debugController';
+import { clearQueue, testEmail } from '../controllers/debugController.js';
 
 const router = Router();
 

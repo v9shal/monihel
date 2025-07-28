@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import prisma from '../../config/prisma';
-import { authService } from '../../service/authService';
+import prisma from '../../config/prisma.js';
+import { authService } from '../../service/authService.js';
 
 const COOKIE_OPTIONS = {
     httpOnly: true,

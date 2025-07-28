@@ -1,5 +1,6 @@
 // routes/endpointRoutes.ts
 import { Router } from "express";
+import { Request,Response } from "express";
 import { 
     createEndPoint, 
     pauseEndPoint, 
@@ -7,10 +8,11 @@ import {
     getAllEndpoints,
     getEndpointById,
     updateEndpoint,
-    deleteEndpoint
-} from "../controllers/endpointController";
-
-import { authMiddleware } from "../middleware/authMiddleware";
+    deleteEndpoint,
+    getEndpointMetrics
+} from "../controllers/endpointController.js";
+import prisma from "../../config/prisma.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
@@ -23,6 +25,6 @@ router.put('/:id', updateEndpoint);
 router.delete('/:id', deleteEndpoint);
 router.post('/:id/pause', pauseEndPoint);
 router.post('/:id/resume', resumeEndpoint);
-
+router.get('/:id/metrics',getEndpointMetrics);
 
 export default router;

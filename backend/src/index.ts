@@ -1,31 +1,177 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { recreateActiveJobs } from './workers/recreateJobs';
-import { pingEndpoint } from './service/pingService'; 
-import { pingQueue, alertQueue } from './config/bullmq'; 
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { recreateActiveJobs } from './workers/recreateJobs.js';
+import { pingEndpoint } from './service/pingService.js'; 
+import { redisPublisher } from './config/bullmq.js'; 
+import { authService } from './service/authService.js';
 import cookieParser from 'cookie-parser';
-import apiRoutes from './api/routes/index'
-const app=express();
+import cors from 'cors';
+import apiRoutes from './api/routes/index.js';
+
+const app = express();
 const prisma = new PrismaClient();
+
+const corsOptions = {
+    origin: process.env.NODE_ENV === 'production' 
+        ? ['http://localhost', 'http://localhost:80'] 
+        : 'http://localhost:5173',
+    credentials: true,
+};
+
+const http = createServer(app);
+const io = new Server(http, {
+    cors: corsOptions
+});
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
+const userSocketMap = new Map<number, string>();
 
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'http://localhost:5173'); 
-    res.header('Access-Control-Allow-Credentials', 'true'); 
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    next();
+const subClient = redisPublisher.duplicate();
+let isRedisConnected = false;
+
+// Redis connection handling
+subClient.on('connect', () => {
+    console.log('[Redis Subscriber] Connected successfully');
+    isRedisConnected = true;
 });
 
+subClient.on('error', (err: any) => {
+    console.error('[Redis Subscriber] Connection Error:', err);
+    isRedisConnected = false;
+});
+
+subClient.on('message', (channel: string, message: string) => {
+    console.log(`[Redis Pub/Sub] Received message from channel '${channel}'`);
+    
+    try {
+        const data = JSON.parse(message);
+        const userId = parseInt(channel.split(':')[1], 10);
+        const socketId = userSocketMap.get(userId);
+        
+        if (socketId && io.sockets.sockets.has(socketId)) {
+            io.to(socketId).emit(data.type, data.payload);
+            console.log(`[Socket.IO Gateway] Forwarded event '${data.type}' to socket ${socketId} for user ${userId}`);
+        } else {
+            console.log(`[Socket.IO Gateway] No active socket for user ${userId}. Message not forwarded.`);
+        }
+    } catch (error) {
+        console.error('[Redis Pub/Sub] Error parsing or forwarding message:', error);
+    }
+});
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+    const token = socket.handshake.auth.token;
+    
+    if (!token) {
+        console.log(`[Socket.IO] Connection attempt rejected: No token provided.`);
+        socket.disconnect();
+        return;
+    }
+
+    try {
+        const userPayload = authService.verifyToken(token);
+        if (!userPayload?.id) {
+            console.log(`[Socket.IO] Connection attempt rejected: Invalid token.`);
+            socket.disconnect();
+            return;
+        }
+
+        const userId = userPayload.id;
+        console.log(`[Socket.IO] Authenticated user ${userId} connected via socket ${socket.id}.`);
+        
+        userSocketMap.set(userId, socket.id);
+        
+        const userChannel = `user-events:${userId}`;
+        if (isRedisConnected) {
+            subClient.subscribe(userChannel);
+            console.log(`[Redis Pub/Sub] Subscribed to channel: ${userChannel}`);
+        }
+
+        socket.on('disconnect', () => {
+            console.log(`[Socket.IO] User ${userId} (socket ${socket.id}) disconnected.`);
+            
+            userSocketMap.delete(userId);
+            
+            if (isRedisConnected) {
+                subClient.unsubscribe(userChannel);
+                console.log(`[Redis Pub/Sub] Unsubscribed from channel: ${userChannel}`);
+            }
+        });
+
+        socket.on('error', (error) => {
+            console.error(`[Socket.IO] Socket error for user ${userId}:`, error);
+        });
+
+    } catch (error) {
+        console.error('[Socket.IO] Error during authentication:', error);
+        socket.disconnect();
+    }
+});
+
+export const publishToUser = (userId: number, eventType: string, payload: any) => {
+    if (!isRedisConnected) {
+        console.warn('[Redis Publisher] Redis not connected, skipping publish');
+        return;
+    }
+
+    const channel = `user-events:${userId}`;
+    const message = JSON.stringify({
+        type: eventType,
+        payload: payload,
+    });
+    
+    redisPublisher.publish(channel, message);
+    console.log(`[Redis Publisher] Published '${eventType}' to channel: ${channel}`);
+};
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+    try {
+        // Check database connection
+        await prisma.$queryRaw`SELECT 1`;
+        
+        // Check Redis connection
+        const redisStatus = isRedisConnected ? 'connected' : 'disconnected';
+        
+        const health = {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            database: 'connected',
+            redis: redisStatus,
+            memory: process.memoryUsage(),
+            version: process.env.npm_package_version || '1.0.0'
+        };
+
+        res.status(200).json(health);
+    } catch (error) {
+        console.error('[Health Check] Error:', error);
+        res.status(503).json({ 
+            status: 'error', 
+            message: 'Service unhealthy',
+            timestamp: new Date().toISOString()
+        });
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 
 app.use('/api', apiRoutes);
+
 app.post('/ping/:id', async (req, res) => {
     try {
         const endpointId = parseInt(req.params.id, 10);
+        
+        if (isNaN(endpointId)) {
+            return res.status(400).json({ error: 'Invalid endpoint ID' });
+        }
+
         const endpoint = await prisma.endpoint.findUnique({ where: { id: endpointId } });
 
         if (!endpoint) {
@@ -44,6 +190,10 @@ app.post('/ping/:id', async (req, res) => {
             },
         });
 
+        if (endpoint.userId) {
+            publishToUser(endpoint.userId, 'ping-update', metric);
+        }
+
         res.status(200).json({ result, metric });
     } catch (error) {
         console.error('[Server] Ping endpoint error:', error);
@@ -51,272 +201,61 @@ app.post('/ping/:id', async (req, res) => {
     }
 });
 
-app.get('/endpoints', async (req, res) => {
-    try {
-        const endpoints = await prisma.endpoint.findMany({
-            include: {
-                user: {
-                    include: {
-                        notificationChannels: true
-                    }
-                },
-                _count: {
-                    select: {
-                        metrics: true,
-                        alerts: true
-                    }
-                }
-            }
-        });
-        res.json(endpoints);
-    } catch (error) {
-        console.error('[Server] Error fetching endpoints:', error);
-        res.status(500).json({ error: 'Failed to fetch endpoints' });
-    }
-});
-app.get('/debug/check-alert-config', async (req, res) => {
-    try {
-        const endpoints = await prisma.endpoint.findMany({
-            select: {
-                id: true,
-                url: true,
-                consecutiveFails: true,
-                alertOnConsecutiveFails: true,
-                isActive: true,
-                user: {
-                    include: {
-                        notificationChannels: true
-                    }
-                }
-            }
-        });
-        
-        const summary = endpoints.map(ep => ({
-            id: ep.id,
-            url: ep.url,
-            consecutiveFails: ep.consecutiveFails,
-            alertOnConsecutiveFails: ep.alertOnConsecutiveFails,
-            isActive: ep.isActive,
-            hasNotificationChannels: ep.user?.notificationChannels?.length > 0,
-            notificationChannels: ep.user?.notificationChannels?.map(nc => ({
-                type: nc.type,
-                target: nc.target
-            })) || []
-        }));
-        
-        res.json({ 
-            message: 'Endpoint alert configuration check',
-            endpoints: summary
-        });
-    } catch (error) {
-        console.error('[Debug] Alert config check error:', error);
-        res.status(500).json({ error: 'Failed to check alert config' });
-    }
-});
-app.post('/debug/fix-alert-threshold', async (req, res) => {
-    try {
-        // Update all endpoints that have null or undefined alertOnConsecutiveFails
-        const updated = await prisma.endpoint.updateMany({
-            where: {
-                OR: [
-                    { alertOnConsecutiveFails: null },
-                    { alertOnConsecutiveFails: undefined },
-                    { alertOnConsecutiveFails: 0 }
-                ]
-            },
-            data: { alertOnConsecutiveFails: 4 }
-        });
-        
-        console.log(`[Debug] Updated ${updated.count} endpoints with alertOnConsecutiveFails = 4`);
-        
-        res.json({ 
-            message: `Fixed alert threshold for ${updated.count} endpoints`,
-            updatedCount: updated.count
-        });
-    } catch (error) {
-        console.error('[Debug] Fix alert threshold error:', error);
-        res.status(500).json({ error: 'Failed to fix alert threshold' });
-    }
+// Graceful shutdown handling
+process.on('SIGTERM', async () => {
+    console.log('[Server] SIGTERM received, shutting down gracefully');
+    
+    // Close HTTP server
+    http.close(() => {
+        console.log('[Server] HTTP server closed');
+    });
+    
+    // Close database connection
+    await prisma.$disconnect();
+    console.log('[Server] Database connection closed');
+    
+    // Close Redis connections
+    subClient.quit();
+    redisPublisher.quit();
+    console.log('[Server] Redis connections closed');
+    
+    process.exit(0);
 });
 
-app.get('/alerts', async (req, res) => {
-    try {
-        const alerts = await prisma.alert.findMany({
-            include: {
-                endpoint: true
-            },
-            orderBy: {
-                createdAt: 'desc'
-            },
-            take: 50
-        });
-        res.json(alerts);
-    } catch (error) {
-        console.error('[Server] Error fetching alerts:', error);
-        res.status(500).json({ error: 'Failed to fetch alerts' });
-    }
-});
-
-
-
-
-
-app.post('/debug/fix-null-users', async (req, res) => {
-    try {
-        // Find default user
-        let defaultUser = await prisma.user.findFirst({
-            where: { email: 'default@test.com' }
-        });
-        
-        if (!defaultUser) {
-            defaultUser = await prisma.user.create({
-                data: {
-                    email: 'default@test.com',
-                    name: 'Default User',
-                    password: 'hashed_password_here'
-                }
-            });
-            
-            await prisma.notificationChannel.create({
-                data: {
-                    type: 'EMAIL',
-                    target: 'alerts@test.com',
-                    isDefault: true,
-                    userId: defaultUser.id
-                }
-            });
-        }
-        
-        // Update all endpoints with null userId
-        const updated = await prisma.endpoint.updateMany({
-            where: { userId: null },
-            data: { userId: defaultUser.id }
-        });
-        
-        res.json({ 
-            message: `Fixed ${updated.count} endpoints with null userId`,
-            defaultUserId: defaultUser.id 
-        });
-    } catch (error) {
-        console.error('[Debug] Fix null users error:', error);
-        res.status(500).json({ error: 'Failed to fix null users' });
-    }
-});
-
-app.get('/debug/endpoint-status', async (req, res) => {
-    try {
-        const endpoints = await prisma.endpoint.findMany({
-            include: {
-                user: {
-                    include: {
-                        notificationChannels: true
-                    }
-                },
-                metrics: {
-                    orderBy: { timestamp: 'desc' },
-                    take: 5
-                },
-                alerts: {
-                    where: { status: 'TRIGGERED' }
-                }
-            }
-        });
-        
-        res.json(endpoints);
-    } catch (error) {
-        console.error('[Debug] Endpoint status error:', error);
-        res.status(500).json({ error: 'Failed to get endpoint status' });
-    }
-});
-
-app.post('/debug/reset-fails', async (req, res) => {
-    try {
-        // Reset consecutive fails
-        const updatedEndpoints = await prisma.endpoint.updateMany({
-            data: { consecutiveFails: 0 }
-        });
-        
-        // Resolve all triggered alerts
-        const resolvedAlerts = await prisma.alert.updateMany({
-            where: { status: 'TRIGGERED' },
-            data: { 
-                status: 'RESOLVED',
-                resolvedAt: new Date()
-            }
-        });
-        
-        res.json({ 
-            message: 'Reset completed',
-            endpointsReset: updatedEndpoints.count,
-            alertsResolved: resolvedAlerts.count
-        });
-    } catch (error) {
-        console.error('[Debug] Reset fails error:', error);
-        res.status(500).json({ error: 'Failed to reset fails' });
-    }
-});
-
-app.post('/debug/test-endpoint/:id', async (req, res) => {
-    try {
-        const endpointId = parseInt(req.params.id, 10);
-        const endpoint = await prisma.endpoint.findUnique({ 
-            where: { id: endpointId } 
-        });
-
-        if (!endpoint) {
-            return res.status(404).json({ error: 'Endpoint not found' });
-        }
-
-        console.log(`[Debug] Testing endpoint ${endpointId}: ${endpoint.url}`);
-        
-        const result = await pingEndpoint(endpoint.url);
-        
-        console.log(`[Debug] Result:`, result);
-        
-        res.json({ 
-            endpoint,
-            result,
-            message: 'Test completed. Check console for detailed logs.'
-        });
-    } catch (error) {
-        console.error('[Debug] Test endpoint error:', error);
-        res.status(500).json({ error: 'Failed to test endpoint' });
-    }
-});
-
-app.get('/debug/queue-status', async (req, res) => {
-    try {
-        const pingQueueJobs = await pingQueue.getJobSchedulers();
-        const alertQueueWaiting = await alertQueue.getWaiting();
-        const alertQueueActive = await alertQueue.getActive();
-        const alertQueueCompleted = await alertQueue.getCompleted();
-        const alertQueueFailed = await alertQueue.getFailed();
-        
-        res.json({
-            pingQueue: {
-                scheduledJobs: pingQueueJobs.length,
-                jobs: pingQueueJobs
-            },
-            alertQueue: {
-                waiting: alertQueueWaiting.length,
-                active: alertQueueActive.length,
-                completed: alertQueueCompleted.length,
-                failed: alertQueueFailed.length
-            }
-        });
-    } catch (error) {
-        console.error('[Debug] Queue status error:', error);
-        res.status(500).json({ error: 'Failed to get queue status' });
-    }
+process.on('SIGINT', async () => {
+    console.log('[Server] SIGINT received, shutting down gracefully');
+    
+    // Close HTTP server
+    http.close(() => {
+        console.log('[Server] HTTP server closed');
+    });
+    
+    // Close database connection
+    await prisma.$disconnect();
+    console.log('[Server] Database connection closed');
+    
+    // Close Redis connections
+    subClient.quit();
+    redisPublisher.quit();
+    console.log('[Server] Redis connections closed');
+    
+    process.exit(0);
 });
 
 async function initialize() {
     try {
-        await recreateActiveJobs();
+        // Test database connection
+        await prisma.$connect();
+        console.log('[Server] Database connected successfully');
         
-        app.listen(PORT, () => {
+        // Recreate active jobs
+        await recreateActiveJobs();
+        console.log('[Server] Active jobs recreated');
+        
+        // Start server
+        http.listen(PORT, () => {
             console.log(`[Server] Server is running on http://localhost:${PORT}`);
-            
+            console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
         });
     } catch (error) {
         console.error('[Server] Failed to initialize:', error);

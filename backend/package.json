@@ -30,6 +30,7 @@
     "cookie": "^0.7.2",
     "cookie-parser": "^1.4.7",
     "cookie-signature": "^1.2.2",
+    "cors": "^2.8.5",
     "create-require": "^1.1.1",
     "csurf": "^1.11.0",
     "debug": "^4.4.1",
@@ -124,6 +125,8 @@
     "side-channel-map": "^1.0.1",
     "side-channel-weakmap": "^1.0.2",
     "simple-update-notifier": "^2.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "split2": "^4.2.0",
     "statuses": "^2.0.2",
     "supports-color": "^5.5.0",
@@ -140,13 +143,25 @@
     "xtend": "^4.0.2",
     "yn": "^3.1.1"
   },
+
   "scripts": {
     "dev": "tsx --watch src/index.ts",
-    "build": "tsc",
     "dev:worker": "tsx --watch src/workers/ping_worker.ts",
-    "start": "node dist/index.js",
-    "dev:alerter": "tsx --watch src/workers/alert_worker.ts"
-  },
+    "dev:alerter": "tsx --watch src/workers/alert_worker.ts",
+    "build": "tsc",
+    "start": "prisma migrate deploy && node dist/index.js",
+    "start:worker": "prisma migrate deploy && node dist/workers/ping_worker.js",
+    "start:alerter": "prisma migrate deploy && node dist/workers/alert_worker.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx src/prisma/seed.ts",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix"
+  }
+,
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -154,6 +169,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
     "@types/csurf": "^1.11.5",
     "@types/express": "^5.0.3",
     "@types/express-session": "^1.18.2",

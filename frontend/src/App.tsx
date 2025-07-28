@@ -1,6 +1,6 @@
 import { AppRouter } from "./router/AppRouter";
 import { Toaster } from "react-hot-toast";
-import React,{ useEffect} from "react";
+import { useEffect} from "react";
 import { useAppDispatch } from "./app/hooks";
 import { checkAuthStatus } from "./features/auth/authSlice";
 function App(){

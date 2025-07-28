@@ -1,6 +1,6 @@
 import { createSlice,createAsyncThunk } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
-
+import { connectSocket, disconnectSocket } from '../../lib/socketService';
 import type { RootState } from "../../app/store";
 import { loginApi ,getProfileApi,registerApi} from '../../api/authApi';
 
@@ -14,12 +14,14 @@ interface AuthState{
     isAuthenticated:boolean;
     status:'idle'|'loading'|'succeeded'|'failed';
     error:string|null;
+    token:string|null;
 }
 
 const initialState:AuthState={
 user:null,
 isAuthenticated:false,
 status:'idle',
+token:null,
 error:null
 }
 
@@ -28,6 +30,9 @@ export const loginUser=createAsyncThunk(
     async(Credential:{email:string,password:string},{rejectWithValue})=>{
         try {
             const response=await loginApi(Credential);
+            if(response.token){
+                connectSocket(response.token);
+            }
             return response.user;
         } catch (error:any) {
             return rejectWithValue(error.response.data.error||'Login failed');
@@ -52,6 +57,9 @@ export const registeruser=createAsyncThunk(
     async(Credential:{name:string,email:string,password:string},{rejectWithValue})=>{
         try {
             const response=await registerApi(Credential);
+             if (response.token) {
+            connectSocket(response.token);
+        }
             return response.user;
         } catch (error:any) {
             return rejectWithValue(error.response.data.error||'failed to register user');
@@ -67,6 +75,7 @@ export const authSlice=createSlice({
             state.user=null;
             state.status='idle',
             state.error=null;
+            disconnectSocket();
         },
        
     },
@@ -76,7 +85,7 @@ export const authSlice=createSlice({
         state.status = 'loading';
         state.error = null;
       })
-        .addCase(loginUser.fulfilled,(state, action: PayloadAction<User>) => {
+       .addCase(loginUser.fulfilled, (state, action: PayloadAction<User>) => {
         state.status = 'succeeded';
         state.isAuthenticated = true;
         state.user = action.payload;

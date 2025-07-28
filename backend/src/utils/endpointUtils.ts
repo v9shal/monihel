@@ -1,4 +1,4 @@
-import prisma from '../config/prisma';
+import prisma from '../config/prisma.js';
 import { Endpoint } from '@prisma/client';
 
 export const getUserEndpoint = async (

@@ -1,10 +1,20 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "target": "ESNext",
+    /* --- Core ES Module Build Options --- */
+    "target": "ES2022",              // Compile to a very modern JS version
+    "module": "NodeNext",             // <-- This is the key for modern Node.js ESM
+    "moduleResolution": "NodeNext",   // <-- And this is its required companion
     "esModuleInterop": true,
-    "verbatimModuleSyntax": false,
-    "resolveJsonModule": true
-  }
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    
+    /* --- Output Options (These are the same as before) --- */
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+    "removeComments": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
 }
